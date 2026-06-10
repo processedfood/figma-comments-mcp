@@ -1,6 +1,3 @@
 node_modules/
 dist/
 .env
-
-# personal draft, not part of the public repo
-article.md
