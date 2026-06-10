@@ -1,88 +1,72 @@
 # Figma Comments MCP
 
-Paste a Figma link into Claude Code and get back a sorted brief of what the team actually needs to do: decisions first, then open questions and who they're waiting on, blocked threads, and to-dos with owners. It even flags when two people leave conflicting feedback on the same element.
+An MCP server for Claude Code that fetches comments from any Figma file link, plus a triage skill that sorts them into what the team needs to do: decisions, open questions, who's waiting on whom, and who owns each to-do.
 
-No more opening a file to forty comment bubbles and reading them one by one.
+## Tools
 
-## How it works, in one minute
+| Tool | What it returns |
+| --- | --- |
+| `get_all_comments` | Every comment thread in the file |
+| `get_unresolved_comments` | Threads not yet marked resolved in Figma |
+| `get_comments_mentioning_me` | Threads where you are @mentioned (detected from your token, no config) |
+| `get_recent_comments` | Threads with activity in the past 24 hours (or a custom `hours`) |
+| `reply_to_comment` | Posts a reply to a thread (needs the write scope, see below) |
 
-This is an MCP server. In plain terms: a small helper that runs on your machine and gives Claude Code the ability to read your Figma comments. You set it up once, then just talk to Claude:
+The fetch tools take a figma.com link (or bare file key) and return threads grouped by the canvas element each comment is pinned to, with authors, replies, @mentions, age, the page it sits on, and a deep link back to the comment in Figma.
 
-> Triage the comments in https://www.figma.com/design/abc123/My-File
+Output is deliberately compact to keep Claude's context cost low: resolved threads come back as a count only, messages are capped at 300 characters, and at most `max_threads` unresolved threads (default 50, newest first) are shown, with a note on how to narrow further. Deep links are built from one pattern in the header rather than repeated per thread.
 
-> Any comments waiting on me?
+Every fetch tool also accepts three optional narrowing arguments. In Claude Code, just say it: "unresolved comments on the Homepage page of <link>", "what has Sarah commented?", "any comments about the pricing table?".
 
-> What has Sarah said about the pricing page?
+- `page` — one page only, by name ("Homepage") or id ("1:2" / "1-2"). If the name doesn't match, the error lists the file's pages. Figma's comments API itself is file-wide, so comments are anchored via the page's top-level frames; in rare cases a comment pinned to a deeply nested element may not resolve to a page and only appears in unfiltered results.
+- `author` — threads where this person wrote a message (partial, case-insensitive).
+- `search` — threads whose text contains a keyword (case-insensitive).
 
-> Reply "on it" to that first one.
-
-Claude fetches the comments through this server, sorts them, and gives you links that jump straight to each comment in Figma.
+`reply_to_comment` lets Claude answer a thread for you ("reply 'on it' to that one"). It posts as the token owner and only works if your token has the **File comments (write)** scope; with a read-only token the fetch tools still work and only replying fails.
 
 ## Setup
 
-You'll do this once. It takes about five minutes, and two of the steps are copy-paste.
+1. **Figma token.** figma.com → Settings → Security → Personal access tokens. Create one with the **File comments** scope: read is enough for fetching, write if you also want `reply_to_comment`.
 
-**You need:** [Claude Code](https://claude.com/claude-code) and [Node.js](https://nodejs.org) (the runtime this server runs on; download the LTS version, click through the installer, done).
+2. **Save the token.** Paste this in the terminal, replacing `your-token-here` with the token you copied:
 
-### 1. Get a Figma token
+   ```sh
+   echo "FIGMA_TOKEN=your-token-here" > ~/.figma-comments-mcp.env
+   ```
 
-A token is like a password that lets the server read comments as you, and only that.
+   That creates a small file in your home folder. The token stays on your machine and is only ever sent to Figma. When the token expires, repeat this step with a new one. (A `FIGMA_TOKEN` environment variable also works and takes precedence, if you prefer that.)
 
-On figma.com: your avatar → **Settings** → **Security** → **Personal access tokens** → create one. Under scopes, set **File comments** to *read*, or *write* if you also want to reply to comments from Claude. Copy the token; Figma only shows it once.
+3. **Register with Claude Code.**
 
-### 2. Save the token on your machine
+   ```sh
+   claude mcp add figma-comments -- npx -y figma-comments-mcp
+   ```
 
-Open the Terminal app and paste this line, replacing `your-token-here` with the token you copied:
+   Or, running from a clone of this repo:
+
+   ```sh
+   npm install
+   npm run build
+   claude mcp add figma-comments -- node /path/to/figma-comments-mcp/dist/server.js
+   ```
+
+4. **Use it.** In a Claude Code session:
+
+   > Triage the comments in https://www.figma.com/design/abc123/My-File
+
+   The `figma-comment-triage` skill (in `.claude/skills/`) handles the sorting: decisions first (including when two people leave conflicting takes on the same element), then open questions with who they're waiting on, blocked threads, and to-dos with owners. Copy the skill folder into your own project's `.claude/skills/` to get the same triage.
+
+## Quick manual check
+
+Test the fetcher against a real file without going through MCP:
 
 ```sh
-echo "FIGMA_TOKEN=your-token-here" > ~/.figma-comments-mcp.env
+FIGMA_TOKEN=<your-token> npm run probe -- https://www.figma.com/design/abc123/My-File
 ```
 
-This saves the token into a small hidden file in your home folder. It stays on your machine and is only ever sent to Figma. When the token expires, repeat this step with a new one. That's the whole renewal process.
+Prints the token owner, thread counts, and the raw grouped JSON.
 
-### 3. Connect it to Claude Code
-
-Paste this in the Terminal:
-
-```sh
-claude mcp add figma-comments -- npx -y figma-comments-mcp
-```
-
-Done. Open a Claude Code session, paste a Figma link, and ask about the comments.
-
-If you skipped step 2, don't worry: the server will tell you exactly what to do instead of failing silently.
-
-### Optional: smarter sorting
-
-The repo includes a small "skill" file, [`.claude/skills/figma-comment-triage/SKILL.md`](.claude/skills/figma-comment-triage/SKILL.md), that teaches Claude exactly how to sort the comments (what counts as a decision, how to spot conflicting feedback, how to infer who owns a to-do). Copy that folder into your own project's `.claude/skills/` folder to get the same triage. Without it things still work; the sorting is just less opinionated.
-
-## What you can ask for
-
-You don't need to learn commands. Phrases like these map onto the server's tools automatically:
-
-| You say | What happens |
-| --- | --- |
-| "all the comments in <link>" | Every thread in the file |
-| "unresolved comments" | Only threads not yet resolved in Figma |
-| "comments mentioning me" | Threads where you're @mentioned (it knows who you are from your token) |
-| "what's new since yesterday?" | Threads with activity in the past 24 hours |
-| "reply 'on it' to that thread" | Posts the reply to Figma as you (needs the write token) |
-
-You can narrow any of these by page ("on the Homepage page"), by person ("Sarah's comments"), or by topic ("about the pricing table").
-
-## Good to know
-
-- **Replies are sent as you.** Claude will show you the text it's about to post. If your token is read-only, fetching still works and only replying is refused, with a clear message.
-- **Long files stay cheap.** Output is kept compact on purpose: resolved threads come back as a count rather than full text, long comments are trimmed, and very busy files show the newest 50 threads with a note on how to narrow down. This keeps Claude fast and your usage costs low.
-- **Page filtering has one rare gap.** Figma anchors comments to top-level frames; a comment pinned to something deeply nested may not match a page filter and will only show in unfiltered results.
-
-## A note from the maker
-
-I'm a designer, and this is my first published developer tool. I built it because I kept opening Figma files to forty comment bubbles with no way to tell which ones actually needed me. It's been solid in my own daily use, but there may be rough edges I haven't hit yet. If something breaks or behaves oddly, [open an issue](https://github.com/processedfood/figma-comments-mcp/issues) and I'll take a look.
-
-## For developers
-
-The five MCP tools are `get_all_comments`, `get_unresolved_comments`, `get_comments_mentioning_me`, `get_recent_comments` and `reply_to_comment`. The fetch tools share optional `page`, `author`, `search` and `max_threads` arguments; recent also takes `hours`.
+## Project layout
 
 ```
 src/
@@ -90,11 +74,15 @@ src/
 │   ├── figma.ts
 │   └── filters.ts
 ├── tools.ts       # MCP tool definitions (Figma client injected)
-├── server.ts      # local stdio entry point (token from env or ~/.figma-comments-mcp.env)
+├── server.ts      # local stdio entry point (token from env)
 └── probe.ts       # manual CLI check
 ```
 
-`core/` and `tools.ts` never touch env vars, the filesystem, or stdio. A future hosted version (Cloudflare Workers + Figma OAuth) only needs a new entry point next to `server.ts`. To run from a clone instead of npm: `npm install && npm run build`, then register with `claude mcp add figma-comments -- node /path/to/repo/dist/server.js`. Quick check against a real file without MCP: `FIGMA_TOKEN=xxx npm run probe -- <figma-url>`.
+`core/` and `tools.ts` never touch env vars, the filesystem, or stdio. A future hosted version (Cloudflare Workers + Figma OAuth) only needs a new entry point next to `server.ts`.
+
+## A note from the maker
+
+I'm a designer, and this is my first published developer tool. I built it because I kept opening Figma files to forty comment bubbles with no way to tell which ones actually needed me. It's been solid in my own daily use, but there may be rough edges I haven't hit yet. If something breaks or behaves oddly, [open an issue](https://github.com/processedfood/figma-comments-mcp/issues) and I'll take a look.
 
 ## Licence
 
