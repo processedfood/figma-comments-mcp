@@ -28,10 +28,18 @@ Every fetch tool also accepts three optional narrowing arguments. In Claude Code
 
 1. **Figma token.** figma.com → Settings → Security → Personal access tokens. Create one with the **File comments** scope: read is enough for fetching, write if you also want `reply_to_comment`.
 
-2. **Register with Claude Code.**
+2. **Save the token.** Paste this in the terminal, replacing `your-token-here` with the token you copied:
 
    ```sh
-   claude mcp add figma-comments -e FIGMA_TOKEN=<your-token> -- npx -y figma-comments-mcp
+   echo "FIGMA_TOKEN=your-token-here" > ~/.figma-comments-mcp.env
+   ```
+
+   That creates a small file in your home folder. The token stays on your machine and is only ever sent to Figma. When the token expires, repeat this step with a new one. (A `FIGMA_TOKEN` environment variable also works and takes precedence, if you prefer that.)
+
+3. **Register with Claude Code.**
+
+   ```sh
+   claude mcp add figma-comments -- npx -y figma-comments-mcp
    ```
 
    Or, running from a clone of this repo:
@@ -39,10 +47,10 @@ Every fetch tool also accepts three optional narrowing arguments. In Claude Code
    ```sh
    npm install
    npm run build
-   claude mcp add figma-comments -e FIGMA_TOKEN=<your-token> -- node /path/to/figma-comments-mcp/dist/server.js
+   claude mcp add figma-comments -- node /path/to/figma-comments-mcp/dist/server.js
    ```
 
-3. **Use it.** In a Claude Code session:
+4. **Use it.** In a Claude Code session:
 
    > Triage the comments in https://www.figma.com/design/abc123/My-File
 
