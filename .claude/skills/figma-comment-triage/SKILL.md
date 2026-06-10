@@ -9,11 +9,12 @@ You have comment threads from the Figma Comments MCP server (or are about to fet
 
 ## Fetching cost rules
 
-- Use the narrowest tool that answers the question: prefer unresolved/recent/mentions over `get_all_comments`, and pass the `page` argument when the user names a page or shares a link with a node id.
+- Use the narrowest tool that answers the question: prefer unresolved/recent/mentions over `get_all_comments`. Pass the `page` argument when the user names a page or shares a link with a node id, `author` when they ask about one person's comments, and `search` when they ask about a topic or keyword.
 - Tool output is compact text grouped by page → element, with thread ids in `[brackets]`. Resolved threads arrive as a count only; never list them individually.
 - Build deep links yourself from the header pattern: `https://www.figma.com/design/<file>?#<thread-id>`.
 - Long messages arrive truncated with "… (truncated)". Triage on what you have; do not re-fetch just to read the rest.
 - @mentions appear inline in the message text; the last line of a thread is its last speaker.
+- `reply_to_comment` posts a reply to a thread as the user (thread id from the `[brackets]`). Only use it when the user asks you to reply, and show them the exact text before or as you send it. It needs a write-scope token; if Figma returns a 403, tell the user their token is read-only.
 
 ## Categories
 

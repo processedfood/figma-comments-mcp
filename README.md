@@ -10,16 +10,23 @@ An MCP server for Claude Code that fetches comments from any Figma file link, pl
 | `get_unresolved_comments` | Threads not yet marked resolved in Figma |
 | `get_comments_mentioning_me` | Threads where you are @mentioned (detected from your token, no config) |
 | `get_recent_comments` | Threads with activity in the past 24 hours (or a custom `hours`) |
+| `reply_to_comment` | Posts a reply to a thread (needs the write scope, see below) |
 
-All tools take a figma.com link (or bare file key) and return threads grouped by the canvas element each comment is pinned to, with authors, replies, @mentions, age, the page it sits on, and a deep link back to the comment in Figma.
+The fetch tools take a figma.com link (or bare file key) and return threads grouped by the canvas element each comment is pinned to, with authors, replies, @mentions, age, the page it sits on, and a deep link back to the comment in Figma.
 
 Output is deliberately compact to keep Claude's context cost low: resolved threads come back as a count only, messages are capped at 300 characters, and at most `max_threads` unresolved threads (default 50, newest first) are shown, with a note on how to narrow further. Deep links are built from one pattern in the header rather than repeated per thread.
 
-Every tool also accepts an optional `page` argument to limit results to one page, by page name ("Homepage") or page id ("1:2" / "1-2"). In Claude Code, just say it: "unresolved comments on the Homepage page of <link>". If the name doesn't match, the error lists the file's pages. Figma's comments API itself is file-wide, so comments are anchored via the page's top-level frames; in rare cases a comment pinned to a deeply nested element may not resolve to a page and only appears in unfiltered results.
+Every fetch tool also accepts three optional narrowing arguments. In Claude Code, just say it: "unresolved comments on the Homepage page of <link>", "what has Sarah commented?", "any comments about the pricing table?".
+
+- `page` — one page only, by name ("Homepage") or id ("1:2" / "1-2"). If the name doesn't match, the error lists the file's pages. Figma's comments API itself is file-wide, so comments are anchored via the page's top-level frames; in rare cases a comment pinned to a deeply nested element may not resolve to a page and only appears in unfiltered results.
+- `author` — threads where this person wrote a message (partial, case-insensitive).
+- `search` — threads whose text contains a keyword (case-insensitive).
+
+`reply_to_comment` lets Claude answer a thread for you ("reply 'on it' to that one"). It posts as the token owner and only works if your token has the **File comments (write)** scope; with a read-only token the fetch tools still work and only replying fails.
 
 ## Setup
 
-1. **Figma token.** figma.com → Settings → Security → Personal access tokens. Create one with the **File comments (read)** scope.
+1. **Figma token.** figma.com → Settings → Security → Personal access tokens. Create one with the **File comments** scope: read is enough for fetching, write if you also want `reply_to_comment`.
 
 2. **Register with Claude Code.**
 

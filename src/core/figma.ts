@@ -80,15 +80,23 @@ export class FigmaClient {
 
   constructor(private readonly token: string) {}
 
-  private async request<T>(path: string): Promise<T> {
+  private async request<T>(
+    path: string,
+    init?: { method: string; body: unknown },
+  ): Promise<T> {
     const res = await fetch(`${FIGMA_API}${path}`, {
-      headers: { "X-Figma-Token": this.token },
+      method: init?.method ?? "GET",
+      headers: {
+        "X-Figma-Token": this.token,
+        ...(init ? { "Content-Type": "application/json" } : {}),
+      },
+      body: init ? JSON.stringify(init.body) : undefined,
     });
     if (!res.ok) {
       const body = await res.text().catch(() => "");
       const hint =
         res.status === 403
-          ? "Check that FIGMA_TOKEN is valid and has the File comments (read) scope."
+          ? "Check that FIGMA_TOKEN is valid and has the File comments scope (posting replies needs the write scope, reading needs read)."
           : res.status === 404
             ? "File not found. Check the link, and that your Figma account can open this file."
             : body.slice(0, 200);
@@ -102,6 +110,18 @@ export class FigmaClient {
       `/v1/files/${encodeURIComponent(fileKey)}/comments`,
     );
     return data.comments ?? [];
+  }
+
+  /** Post a reply to an existing comment thread. Needs the write scope. */
+  async postReply(
+    fileKey: string,
+    commentId: string,
+    message: string,
+  ): Promise<FigmaComment> {
+    return this.request<FigmaComment>(
+      `/v1/files/${encodeURIComponent(fileKey)}/comments`,
+      { method: "POST", body: { message, comment_id: commentId } },
+    );
   }
 
   async getMe(): Promise<FigmaUser> {

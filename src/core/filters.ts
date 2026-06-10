@@ -40,6 +40,30 @@ export function filterMentions(
   );
 }
 
+/** Threads where the given person wrote any message (case-insensitive, partial). */
+export function filterByAuthor(
+  threads: CommentThread[],
+  author: string,
+): CommentThread[] {
+  const target = author.trim().toLowerCase();
+  return threads.filter((t) =>
+    t.participants.some((p) => p.toLowerCase().includes(target)),
+  );
+}
+
+/** Threads where any message contains the keyword (case-insensitive). */
+export function filterByKeyword(
+  threads: CommentThread[],
+  keyword: string,
+): CommentThread[] {
+  const target = keyword.trim().toLowerCase();
+  return threads.filter(
+    (t) =>
+      t.message.toLowerCase().includes(target) ||
+      t.replies.some((r) => r.message.toLowerCase().includes(target)),
+  );
+}
+
 /** Threads with activity within the past N hours. */
 export function filterRecent(threads: CommentThread[], hours: number): CommentThread[] {
   const cutoff = Date.now() - hours * 3_600_000;

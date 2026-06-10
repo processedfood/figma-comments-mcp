@@ -15,6 +15,8 @@ import {
   type CommentThread,
 } from "./core/figma.js";
 import {
+  filterByAuthor,
+  filterByKeyword,
   filterByPage,
   filterMentions,
   filterRecent,
@@ -36,6 +38,18 @@ const sharedArgs = {
     .optional()
     .describe(
       "Optional: limit to one page, by page name (e.g. \"Homepage\") or page id (e.g. \"1:2\" or \"1-2\")",
+    ),
+  author: z
+    .string()
+    .optional()
+    .describe(
+      "Optional: only threads where this person wrote a message. Matches the Figma handle, partial and case-insensitive.",
+    ),
+  search: z
+    .string()
+    .optional()
+    .describe(
+      "Optional: only threads whose text contains this keyword (case-insensitive)",
     ),
   max_threads: z
     .number()
@@ -130,34 +144,52 @@ function present(
   return { content: [{ type: "text", text: lines.join("\n") }] };
 }
 
+interface FetchOpts {
+  url: string;
+  page?: string;
+  author?: string;
+  search?: string;
+}
+
 /**
  * Fetch all threads for a file, annotated with page names, optionally
- * narrowed to one page. Throws a friendly error listing the file's pages
- * when the requested page doesn't match.
+ * narrowed by page, author, or keyword. Throws a friendly error listing the
+ * file's pages when the requested page doesn't match.
  */
 async function fetchThreads(
   deps: Deps,
-  url: string,
-  page?: string,
-): Promise<{ fileKey: string; threads: CommentThread[]; pageSuffix: string }> {
+  { url, page, author, search }: FetchOpts,
+): Promise<{ fileKey: string; threads: CommentThread[]; suffix: string }> {
   const fileKey = parseFileKey(url);
   const [comments, pageMap] = await Promise.all([
     deps.client.getComments(fileKey),
     deps.client.getPageMap(fileKey).catch(() => null),
   ]);
-  const threads = buildThreads(comments, fileKey, pageMap?.nodeToPage);
-  if (!page) return { fileKey, threads, pageSuffix: "" };
-  if (!pageMap) {
-    throw new Error(
-      "Could not load the file's page structure, so page filtering is unavailable for this file right now.",
-    );
+  let threads = buildThreads(comments, fileKey, pageMap?.nodeToPage);
+  let suffix = "";
+  if (page) {
+    if (!pageMap) {
+      throw new Error(
+        "Could not load the file's page structure, so page filtering is unavailable for this file right now.",
+      );
+    }
+    const { threads: filtered, matched } = filterByPage(threads, page, pageMap.pages);
+    if (!matched) {
+      const available = pageMap.pages.map((p) => `"${p.name}" (${p.id})`).join(", ");
+      throw new Error(`No page matching "${page}". This file's pages: ${available}.`);
+    }
+    threads = filtered;
+    suffix += ` on page "${matched.name}"`;
   }
-  const { threads: filtered, matched } = filterByPage(threads, page, pageMap.pages);
-  if (!matched) {
-    const available = pageMap.pages.map((p) => `"${p.name}" (${p.id})`).join(", ");
-    throw new Error(`No page matching "${page}". This file's pages: ${available}.`);
+  if (author) {
+    threads = filterByAuthor(threads, author);
+    suffix += ` by "${author}"`;
   }
-  return { fileKey, threads: filtered, pageSuffix: ` on page "${matched.name}"` };
+  if (search) {
+    threads = filterByKeyword(threads, search);
+    suffix += ` containing "${search}"`;
+  }
+  return { fileKey, threads, suffix };
 }
 
 export function registerTools(server: McpServer, deps: Deps): void {
@@ -169,9 +201,14 @@ export function registerTools(server: McpServer, deps: Deps): void {
         "Fetch every comment thread in a Figma file, grouped by page and the canvas element each thread is pinned to. Resolved threads are returned as a count only. Prefer a narrower tool (unresolved/recent/mentions, or the page argument) when it answers the question.",
       inputSchema: sharedArgs,
     },
-    async ({ url, page, max_threads }) => {
-      const { fileKey, threads, pageSuffix } = await fetchThreads(deps, url, page);
-      return present(threads, `all${pageSuffix}`, fileKey, max_threads);
+    async ({ url, page, author, search, max_threads }) => {
+      const { fileKey, threads, suffix } = await fetchThreads(deps, {
+        url,
+        page,
+        author,
+        search,
+      });
+      return present(threads, `all${suffix}`, fileKey, max_threads);
     },
   );
 
@@ -182,11 +219,16 @@ export function registerTools(server: McpServer, deps: Deps): void {
       description: "Comment threads not yet marked resolved in Figma.",
       inputSchema: sharedArgs,
     },
-    async ({ url, page, max_threads }) => {
-      const { fileKey, threads, pageSuffix } = await fetchThreads(deps, url, page);
+    async ({ url, page, author, search, max_threads }) => {
+      const { fileKey, threads, suffix } = await fetchThreads(deps, {
+        url,
+        page,
+        author,
+        search,
+      });
       return present(
         filterUnresolved(threads),
-        `unresolved${pageSuffix}`,
+        `unresolved${suffix}`,
         fileKey,
         max_threads,
       );
@@ -201,12 +243,17 @@ export function registerTools(server: McpServer, deps: Deps): void {
         "Comment threads where the owner of the Figma token is @mentioned.",
       inputSchema: sharedArgs,
     },
-    async ({ url, page, max_threads }) => {
+    async ({ url, page, author, search, max_threads }) => {
       const me = await deps.client.getMe();
-      const { fileKey, threads, pageSuffix } = await fetchThreads(deps, url, page);
+      const { fileKey, threads, suffix } = await fetchThreads(deps, {
+        url,
+        page,
+        author,
+        search,
+      });
       return present(
         filterMentions(threads, me.handle),
-        `mentioning @${me.handle}${pageSuffix}`,
+        `mentioning @${me.handle}${suffix}`,
         fileKey,
         max_threads,
       );
@@ -229,14 +276,50 @@ export function registerTools(server: McpServer, deps: Deps): void {
           .describe("Look-back window in hours, default 24"),
       },
     },
-    async ({ url, page, max_threads, hours }) => {
-      const { fileKey, threads, pageSuffix } = await fetchThreads(deps, url, page);
+    async ({ url, page, author, search, max_threads, hours }) => {
+      const { fileKey, threads, suffix } = await fetchThreads(deps, {
+        url,
+        page,
+        author,
+        search,
+      });
       return present(
         filterRecent(threads, hours),
-        `past ${hours}h${pageSuffix}`,
+        `past ${hours}h${suffix}`,
         fileKey,
         max_threads,
       );
+    },
+  );
+
+  server.registerTool(
+    "reply_to_comment",
+    {
+      title: "Reply to a comment",
+      description:
+        "Post a reply to an existing comment thread in a Figma file. Use a thread id from the [brackets] in fetch output as comment_id. Requires the Figma token to have the File comments write scope.",
+      inputSchema: {
+        url: sharedArgs.url,
+        comment_id: z
+          .string()
+          .describe("Id of the thread to reply to, from the [brackets] in fetch output"),
+        message: z
+          .string()
+          .min(1)
+          .describe("Reply text, plain text. \"@Name\" mentions are sent as plain text."),
+      },
+    },
+    async ({ url, comment_id, message }) => {
+      const fileKey = parseFileKey(url);
+      const posted = await deps.client.postReply(fileKey, comment_id, message);
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `Replied to thread ${comment_id} as @${posted.user.handle} (comment id ${posted.id}).\nhttps://www.figma.com/design/${fileKey}?#${comment_id}`,
+          },
+        ],
+      };
     },
   );
 }
