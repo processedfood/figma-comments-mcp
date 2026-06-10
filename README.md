@@ -80,6 +80,10 @@ src/
 
 `core/` and `tools.ts` never touch env vars, the filesystem, or stdio. A future hosted version (Cloudflare Workers + Figma OAuth) only needs a new entry point next to `server.ts`.
 
+## A note from the maker
+
+I'm a designer, and this is my first published developer tool. I built it because I kept opening Figma files to forty comment bubbles with no way to tell which ones actually needed me. It's been solid in my own daily use, but there may be rough edges I haven't hit yet. If something breaks or behaves oddly, [open an issue](https://github.com/processedfood/figma-comments-mcp/issues) and I'll take a look.
+
 ## Licence
 
 MIT
