@@ -54,7 +54,18 @@ Every fetch tool also accepts three optional narrowing arguments. In Claude Code
 
    > Triage the comments in https://www.figma.com/design/abc123/My-File
 
-   The `figma-comment-triage` skill (in `.claude/skills/`) handles the sorting: decisions first (including when two people leave conflicting takes on the same element), then open questions with who they're waiting on, blocked threads, and to-dos with owners. Copy the skill folder into your own project's `.claude/skills/` to get the same triage.
+## The triage skill
+
+The server fetches and filters; the actual sorting intelligence lives in a skill, a markdown file at [`.claude/skills/figma-comment-triage/SKILL.md`](.claude/skills/figma-comment-triage/SKILL.md) that teaches Claude how to read the threads. It sorts every unresolved thread into four categories, in this order:
+
+1. **Needs a decision** — explicit "should we A or B" threads, plus conflicts: because threads arrive grouped by canvas element, the skill compares takes on the same element and flags it when two people argue opposite directions, quoting both positions.
+2. **Open questions** — unanswered questions, each with who it's waiting on (inferred from @mentions or who spoke last).
+3. **Waiting for** — threads blocked on something promised or external, with what and how long.
+4. **To-dos** — actionable requests with an inferred owner, marked **unassigned** when nobody has picked it up, so tasks don't silently fall to nobody.
+
+Anything older than 7 days gets called out as stale, every item links back to the comment in Figma, and resolved threads are reported as one closing count line.
+
+**To get it:** copy the `.claude/skills/figma-comment-triage` folder into your own project's `.claude/skills/` folder (the npm package ships only the server, so the skill comes from this repo). Without it, Claude still fetches and sorts comments when asked; the skill is what makes the triage consistent and opinionated. It's also plain markdown, so if you want different categories or rules, edit the file. No rebuild needed.
 
 ## Quick manual check
 
