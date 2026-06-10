@@ -1,0 +1,41 @@
+{
+  "name": "figma-comments-mcp",
+  "version": "0.2.0",
+  "description": "Figma Comments MCP: an MCP server that fetches and filters Figma file comments for triage in Claude Code",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "figma-comments-mcp": "dist/server.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "mcp",
+    "figma",
+    "comments",
+    "claude",
+    "model-context-protocol"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/server.ts",
+    "check": "tsc --noEmit",
+    "probe": "tsx src/probe.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.0.0",
+    "typescript": "^5.4.0",
+    "@types/node": "^20.0.0"
+  }
+}
